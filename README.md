@@ -1,25 +1,24 @@
 # pi-assumptions
 
-An extension for the [pi](https://pi.dev) coding agent. When a task leaves a detail open, the agent picks a sensible default, flags it as an assumption and keeps working instead of stopping to ask. When it's done, you go through the flags and send back the ones that are wrong.
+A small extension for the [pi](https://pi.dev) coding agent.
 
-## Why I made this
+When you give an agent a task, there are usually details you didn't mention, like the byte order or the units. Normally the agent either guesses quietly or stops to ask you. With this extension it picks a reasonable default, writes the assumption down and keeps going. When it's finished, you can look through what it assumed and tell it which ones are wrong.
 
-Most tasks leave small things unsaid, like byte order or units. Agents usually handle that in one of two ways: they guess without telling you, or they stop and ask, and you have to keep coming back to answer. I wanted something in between. The agent still guesses, but every guess is written down so you can check it afterwards.
-
-It was also a good way to learn how pi extensions work. The whole thing is one file, [assumptions.ts](assumptions.ts), about 70 lines.
+I built it as a small project to get to know pi's extension API.
 
 ## How it works
 
-1. While working, the agent calls the `flag_assumption` tool once for each guess, with a confidence level: low, medium or high.
-2. The footer keeps a count, for example `3 assumption(s) to review: /assumptions`.
-3. Low-confidence flags also show a warning right away. Medium and high ones just wait in the count.
-4. When you're ready, type `/assumptions` and pick the one that's wrong, or press Esc if they're all fine. The agent then gets a follow-up message saying the assumption was wrong and asking it to fix the work that depends on it.
+The extension adds a tool called `flag_assumption`. Every time the agent has to guess something, it calls the tool with a short sentence and how sure it is (low, medium or high).
 
-Flags are saved in the session, so they're still there after `/reload` or `pi --continue`.
+- The footer shows how many assumptions are waiting, for example `3 assumption(s) to review: /assumptions`.
+- If the agent isn't very sure (low), you also get a warning right away.
+- Type `/assumptions` to see the list. Select one that's wrong and the agent goes back and fixes the code that depended on it. Press Esc if they all look fine.
 
-## Try it
+The assumptions are saved in the session, so they're still there after `/reload` or `pi --continue`.
 
-You need Node.js 22.19 or newer.
+## Trying it out
+
+You need Node.js 22.19 or newer. Install pi, clone this repo and start pi with the extension:
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
@@ -28,52 +27,43 @@ mkdir test && cd test
 pi -e ../pi-assumptions/assumptions.ts
 ```
 
-Log in with `/login`, then give pi a task that leaves some details open, for example:
+Log in with `/login` and give it a task that leaves some details open, for example:
 
 ```text
 Write rpm.py with a function that converts 2 raw CAN bytes to motor rpm.
 ```
 
-When it's done, type `/assumptions` to see what it guessed.
+Then type `/assumptions` to see what it guessed.
 
-If you want to keep it instead of passing `-e` every time, you can install it as a pi package:
+If you want to keep it installed instead of using `-e` every time:
 
 ```bash
 pi install git:github.com/Sana8200/pi-assumptions
 ```
 
-## Under the hood
+## How I built it
 
-These are the parts of the pi extension API it uses:
+Everything is in [assumptions.ts](assumptions.ts), around 70 lines. These are the parts of the pi API it uses:
 
-| pi API | Used for |
-|---|---|
-| `pi.registerTool` | The `flag_assumption` tool, with a TypeBox schema for `text` and `confidence` |
-| `promptSnippet`, `promptGuidelines` | Telling the model when to use the tool |
-| `ctx.ui.setStatus`, `ctx.ui.notify` | The footer count and the low-confidence warning |
-| `pi.registerCommand` | `/assumptions`, using `ctx.ui.select` and `pi.sendUserMessage` |
-| Tool-result `details`, `session_start` | Saving flags in the session and rebuilding them with `ctx.sessionManager.getBranch()` |
+- `pi.registerTool` for the `flag_assumption` tool, with a TypeBox schema for the text and the confidence
+- `promptSnippet` and `promptGuidelines` to tell the model when to use the tool
+- `ctx.ui.setStatus` and `ctx.ui.notify` for the footer count and the warning
+- `pi.registerCommand` for `/assumptions`, together with `ctx.ui.select` and `pi.sendUserMessage`
+- the tool result's `details` and the `session_start` event, to save the flags in the session and load them again with `ctx.sessionManager.getBranch()`
 
-To type-check after making changes:
+To type-check it, run `npm install` and then `npm run check`.
 
-```bash
-npm install
-npm run check
-```
+## Things I noticed while testing
 
-## What I noticed while testing
-
-- At first the model put all of its choices into a single flag. The guideline said "call flag_assumption once", and the model read that as once in total. Changing it to "separately for each assumption" fixed it.
-- In one run, the model said a scaling it had guessed (0.1 °C/bit with a −40 °C offset) was the SAE J1939 standard. So flags only catch what the model admits is a guess. If it's confidently wrong, nothing gets flagged.
+- At first the model put all of its assumptions into one flag. My guideline said "call flag_assumption once", and it understood that as once in total. Changing it to "separately for each assumption" fixed it.
+- In one run, the model guessed a scaling (0.1 °C/bit with a −40 °C offset) and then said it was from the SAE J1939 standard. So the flags only show what the model admits is a guess. If it's confidently wrong, nothing gets flagged.
 - The tests the model wrote only checked that the code did what it had assumed, so they couldn't catch a wrong assumption.
 
-## Ideas for later
+## What I'd like to add
 
-- Mark a flag as handled once it has been fixed.
-- An advisor that checks the flags against the code the agent actually changed.
+- Marking a flag as done once it's been fixed
+- An advisor that compares the flags with the code the agent actually changed
 
-## Notes
+---
 
-Tested with pi 1.3.0 and Gemini Flash models. If you try it and something doesn't work, feel free to open an issue.
-
-MIT licensed, see [LICENSE](LICENSE).
+Tested with pi 1.3.0 and Gemini Flash models. MIT licensed.
